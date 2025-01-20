@@ -134,7 +134,7 @@ class UserJob:
         }
         answer = AuthCode.get_auth_code(self.session)
         data['answer'] = answer
-        self.request_device_id()
+        # self.request_device_id()
         response = self.session.post(API_BASE_LOGIN.get('url'), data)
         result = response.json()
         if result.get('result_code') == 0:  # 登录成功
@@ -160,13 +160,16 @@ class UserJob:
         return False
 
     def qr_login(self):
-        self.request_device_id()
+        # self.request_device_id()
+        # 先判断是不是曾经登录过：cookie存在tk，不存在再扫描登录
+        if self.qr_relogin():
+            return True
         image_uuid, png_path = self.download_code()
         last_time = time_int()
         while True:
             data = {
-                'RAIL_DEVICEID': self.session.cookies.get('RAIL_DEVICEID'),
-                'RAIL_EXPIRATION': self.session.cookies.get('RAIL_EXPIRATION'),
+                # 'RAIL_DEVICEID': self.session.cookies.get('RAIL_DEVICEID'),
+                # 'RAIL_EXPIRATION': self.session.cookies.get('RAIL_EXPIRATION'),
                 'uuid': image_uuid,
                 'appid': 'otn'
             }
@@ -203,6 +206,20 @@ class UserJob:
         self.session.get(API_USER_LOGIN, allow_redirects=True)
         new_tk = self.auth_uamtk()
         user_name = self.auth_uamauthclient(new_tk)
+        self.update_user_info({'user_name': user_name})
+        self.session.get(API_USER_LOGIN, allow_redirects=True)
+        self.login_did_success()
+        return True
+
+    def qr_relogin(self):
+        new_tk = self.session.cookies.get('tk')
+        if not new_tk:
+            new_tk = self.auth_uamtk()
+        if not new_tk:
+            return False
+        user_name = self.auth_uamauthclient(new_tk)
+        if not user_name:
+            return False
         self.update_user_info({'user_name': user_name})
         self.session.get(API_USER_LOGIN, allow_redirects=True)
         self.login_did_success()
@@ -268,7 +285,7 @@ class UserJob:
                 else:
                     print_qrcode(png_path)
                 UserLog.add_log(UserLog.MESSAGE_QRCODE_DOWNLOADED.format(png_path)).flush()
-                Notification.send_email_with_qrcode(Config().EMAIL_RECEIVER, '你有新的登录二维码啦!', png_path)
+                Notification.send_email_with_qrcode(Config().EMAIL_RECEIVER, f'{self.user_name}，你有新的登录二维码啦!', png_path)
                 self.retry_count = 0
                 return result.get('uuid'), png_path
             raise KeyError('获取二维码失败: {}'.format(result.get('result_message')))
@@ -277,7 +294,7 @@ class UserJob:
             UserLog.add_quick_log(
                 UserLog.MESSAGE_QRCODE_FAIL.format(e, sleep_time)).flush()
             time.sleep(sleep_time)
-            self.request_device_id(self.retry_count % 20 == 0)
+            # self.request_device_id(self.retry_count % 20 == 0)
             self.retry_count += 1
             return self.download_code()
 
