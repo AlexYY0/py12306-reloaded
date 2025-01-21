@@ -170,7 +170,7 @@ class Cdn:
                                timeout=self.check_time_out,
                                verify=False)
 
-        if response.status_code == 200:
+        if response.status_code == 200 and not response.text:
             if not self.is_recheck:
                 self.available_items.append(item)
             else:
